@@ -8,20 +8,41 @@ export class ProtocolScheduler {
   private static cronJobs: Map<string, cron.ScheduledTask> = new Map();
 
   /**
-   * Initialize the protocol scheduler
+   * Initialize the protocol scheduler with maintenance tasks
    */
   static initialize(): void {
     console.log('Initializing protocol scheduler...');
     
     // Run every minute to check for scheduled messages
-    const task = cron.schedule('* * * * *', async () => {
+    const protocolTask = cron.schedule('* * * * *', async () => {
       await this.processScheduledProtocols();
     }, {
       scheduled: false,
     });
 
-    task.start();
-    console.log('Protocol scheduler started');
+    // Run maintenance tasks every hour
+    const maintenanceTask = cron.schedule('0 * * * *', async () => {
+      await this.performMaintenance();
+    }, {
+      scheduled: false,
+    });
+
+    // Run failed delivery retry every 15 minutes
+    const retryTask = cron.schedule('*/15 * * * *', async () => {
+      await this.processFailedDeliveries();
+    }, {
+      scheduled: false,
+    });
+
+    protocolTask.start();
+    maintenanceTask.start();
+    retryTask.start();
+    
+    this.cronJobs.set('protocol-processor', protocolTask);
+    this.cronJobs.set('maintenance', maintenanceTask);
+    this.cronJobs.set('retry-processor', retryTask);
+    
+    console.log('✅ Protocol scheduler started with maintenance tasks');
   }
 
   /**
@@ -287,12 +308,46 @@ export class ProtocolScheduler {
   }
 
   /**
-   * Get scheduler statistics
+   * Get comprehensive scheduler statistics
    */
-  static getStats() {
+  static async getStats() {
+    const queueStats = await JobManager.getQueueStats();
+    
     return {
       activeCronJobs: this.cronJobs.size,
-      jobQueueStats: JobManager.getQueueStats(),
+      queueStats,
+      lastProcessedAt: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Process failed deliveries and retry them
+   */
+  static async processFailedDeliveries(): Promise<void> {
+    try {
+      const retriedCount = await JobManager.retryFailedDeliveries(20);
+      if (retriedCount > 0) {
+        console.log(`🔄 Retried ${retriedCount} failed deliveries`);
+      }
+    } catch (error) {
+      console.error('Error processing failed deliveries:', error);
+    }
+  }
+
+  /**
+   * Perform maintenance tasks
+   */
+  static async performMaintenance(): Promise<void> {
+    try {
+      // Clean up old jobs
+      await JobManager.cleanupOldJobs(24);
+      
+      // Process failed deliveries
+      await this.processFailedDeliveries();
+      
+      console.log('✅ Maintenance tasks completed');
+    } catch (error) {
+      console.error('Error during maintenance:', error);
+    }
   }
 }

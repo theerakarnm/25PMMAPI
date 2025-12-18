@@ -22,7 +22,7 @@ export interface FeedbackInteractionLog {
   responseValue: string | null;
   responseAction: string | null;
   timeDifferenceMs: number | null;
-  status: 'sent' | 'delivered' | 'read' | 'responded' | 'missed';
+  status: 'sent' | 'delivered' | 'read' | 'responded' | 'missed' | 'failed';
   createdAt: Date;
 }
 

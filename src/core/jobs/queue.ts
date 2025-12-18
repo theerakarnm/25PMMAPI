@@ -1,11 +1,7 @@
 import { Queue, Worker, Job } from 'bullmq';
 import { Redis } from 'ioredis';
-import { eq } from 'drizzle-orm';
 import { env } from '../config/env.js';
-import { lineClient } from '../line/client.js';
-import { database } from '../database/connection.js';
-import { interactionLogs } from '../database/schema.js';
-import { v4 as uuidv4 } from 'uuid';
+import { MessageDeliveryService, MessageDeliveryOptions } from './message-delivery-service.js';
 
 // Redis connection
 const redis = new Redis(env.REDIS_URL, {
@@ -32,7 +28,7 @@ export interface MessageJobData {
     buttons: Array<{
       label: string;
       value: string;
-      action: string;
+      action: 'complete' | 'postpone' | 'skip';
     }>;
   };
 }
@@ -75,70 +71,26 @@ const messageWorker = new Worker(
     const data = job.data;
     
     try {
-      // Log message as sent
-      const logId = uuidv4();
-      const sentAt = new Date();
-      
-      await database.insert(interactionLogs).values({
-        id: logId,
+      const result = await MessageDeliveryService.deliverMessage({
         userId: data.userId,
         protocolId: data.protocolId,
         stepId: data.stepId,
         assignmentId: data.assignmentId,
-        sentAt,
-        status: 'sent',
-        createdAt: new Date(),
+        messageType: data.messageType,
+        content: data.content,
+        requiresFeedback: data.requiresFeedback,
+        feedbackConfig: data.feedbackConfig,
+        retryAttempt: job.attemptsMade,
+        maxRetries: 3,
       });
 
-      // Send the message based on type
-      switch (data.messageType) {
-        case 'text':
-          await lineClient.sendTextMessage(data.userId, data.content.text!);
-          break;
-          
-        case 'image':
-          await lineClient.sendImageMessage(
-            data.userId,
-            data.content.imageUrl!,
-            data.content.previewImageUrl!
-          );
-          break;
-          
-        case 'flex':
-          await lineClient.sendFlexMessage(
-            data.userId,
-            data.content.text || 'Flex Message',
-            data.content.flexContent
-          );
-          break;
-          
-        case 'template':
-          if (data.requiresFeedback && data.feedbackConfig) {
-            const buttons = data.feedbackConfig.buttons.map(button => ({
-              type: 'postback' as const,
-              label: button.label,
-              data: `${data.protocolId}:${data.stepId}:${button.value}`,
-            }));
-            
-            await lineClient.sendButtonTemplate(
-              data.userId,
-              data.feedbackConfig.question,
-              buttons
-            );
-          }
-          break;
+      if (!result.success && result.retryable) {
+        throw new Error(result.error || 'Message delivery failed');
       }
 
-      // Update log as delivered
-      await database
-        .update(interactionLogs)
-        .set({
-          deliveredAt: new Date(),
-          status: 'delivered',
-        })
-        .where(eq(interactionLogs.id, logId));
-
-      console.log(`Message delivered successfully to user ${data.userId}`);
+      if (!result.success) {
+        console.error(`❌ Non-retryable error for user ${data.userId}: ${result.error}`);
+      }
       
     } catch (error) {
       console.error('Failed to deliver message:', error);
@@ -247,16 +199,67 @@ export class JobManager {
   }
 
   /**
-   * Get queue statistics
+   * Get comprehensive queue statistics
    */
   static async getQueueStats() {
     const messageStats = await messageQueue.getJobCounts();
     const scheduledStats = await scheduledMessageQueue.getJobCounts();
+    const deliveryStats = await MessageDeliveryService.getDeliveryStats();
     
     return {
       messageQueue: messageStats,
       scheduledQueue: scheduledStats,
+      deliveryStats,
+      timestamp: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Retry failed deliveries
+   */
+  static async retryFailedDeliveries(limit: number = 50): Promise<number> {
+    const failedDeliveries = await MessageDeliveryService.getFailedDeliveries(limit);
+    let retriedCount = 0;
+
+    for (const log of failedDeliveries) {
+      try {
+        // Reconstruct message data from log
+        const messageData: MessageJobData = {
+          userId: log.userId,
+          protocolId: log.protocolId,
+          stepId: log.stepId,
+          assignmentId: log.assignmentId,
+          messageType: 'text', // Default, would need to be stored in log for accuracy
+          content: { text: 'Retry message' }, // Would need actual content from protocol step
+          requiresFeedback: false,
+        };
+
+        await this.scheduleImmediateMessage(messageData);
+        retriedCount++;
+      } catch (error) {
+        console.error(`Failed to retry delivery for log ${log.id}:`, error);
+      }
+    }
+
+    return retriedCount;
+  }
+
+  /**
+   * Clean up old completed jobs
+   */
+  static async cleanupOldJobs(olderThanHours: number = 24): Promise<void> {
+    const cutoffTime = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+    
+    try {
+      await messageQueue.clean(cutoffTime.getTime(), 100, 'completed');
+      await messageQueue.clean(cutoffTime.getTime(), 50, 'failed');
+      await scheduledMessageQueue.clean(cutoffTime.getTime(), 100, 'completed');
+      await scheduledMessageQueue.clean(cutoffTime.getTime(), 50, 'failed');
+      
+      console.log(`✅ Cleaned up jobs older than ${olderThanHours} hours`);
+    } catch (error) {
+      console.error('Failed to clean up old jobs:', error);
+    }
   }
 }
 

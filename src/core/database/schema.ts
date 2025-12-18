@@ -28,7 +28,7 @@ export const interactionLogs = pgTable('interaction_logs', {
   responseValue: text('response_value'),
   responseAction: varchar('response_action', { length: 50 }),
   timeDifferenceMs: integer('time_difference_ms'), // Milliseconds between sent and responded
-  status: varchar('status', { length: 20 }).notNull().default('sent').$type<'sent' | 'delivered' | 'read' | 'responded' | 'missed'>(),
+  status: varchar('status', { length: 20 }).notNull().default('sent').$type<'sent' | 'delivered' | 'read' | 'responded' | 'missed' | 'failed'>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ([{
   userIdIdx: index('idx_interaction_logs_user_id').on(table.userId),

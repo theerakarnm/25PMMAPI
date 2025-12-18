@@ -25,6 +25,9 @@ export const authMiddleware = async (c: Context, next: Next) => {
   }
 };
 
+// Alias for consistency
+export const requireAuth = authMiddleware;
+
 export const optionalAuthMiddleware = async (c: Context, next: Next) => {
   try {
     const authHeader = c.req.header('Authorization');

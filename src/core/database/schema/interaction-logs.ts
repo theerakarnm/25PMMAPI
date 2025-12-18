@@ -14,7 +14,7 @@ export const insertInteractionLogSchema = z.object({
   responseValue: z.string().optional(),
   responseAction: z.string().optional(),
   timeDifferenceMs: z.number().int().optional(),
-  status: z.enum(['sent', 'delivered', 'read', 'responded', 'missed']).optional(),
+  status: z.enum(['sent', 'delivered', 'read', 'responded', 'missed', 'failed']).optional(),
 });
 
 export const selectInteractionLogSchema = z.object({
@@ -30,7 +30,7 @@ export const selectInteractionLogSchema = z.object({
   responseValue: z.string().nullable(),
   responseAction: z.string().nullable(),
   timeDifferenceMs: z.number().int().nullable(),
-  status: z.enum(['sent', 'delivered', 'read', 'responded', 'missed']),
+  status: z.enum(['sent', 'delivered', 'read', 'responded', 'missed', 'failed']),
   createdAt: z.date(),
 });
 

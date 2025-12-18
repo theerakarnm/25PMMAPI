@@ -8,6 +8,7 @@ import { users } from './routes/users.js';
 import { line } from './routes/line.js';
 import protocols from './routes/protocols.js';
 import { feedback } from './routes/feedback.js';
+import { jobs } from './routes/jobs.js';
 import { env } from './core/config/env.js';
 import { ProtocolScheduler } from './core/jobs/scheduler.js';
 
@@ -41,6 +42,7 @@ app.route('/api/users', users);
 app.route('/api/line', line);
 app.route('/api/protocols', protocols);
 app.route('/api/feedback', feedback);
+app.route('/api/jobs', jobs);
 
 // 404 handler
 app.notFound((c) => {

@@ -3,6 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "build": "bun tsc --project ./tsconfig.json",
     "start": "node dist/index.js",
     "startup": "tsx scripts/startup.ts",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/bun": "^1.3.5",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.11.17",
     "@types/node-cron": "^3.0.11",
