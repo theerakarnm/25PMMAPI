@@ -6,6 +6,7 @@ import { errorMiddleware } from './middleware/error.js';
 import { auth } from './routes/auth.js';
 import { users } from './routes/users.js';
 import { line } from './routes/line.js';
+import protocols from './routes/protocols.js';
 import { env } from './core/config/env.js';
 import { ProtocolScheduler } from './core/jobs/scheduler.js';
 
@@ -37,6 +38,7 @@ app.get('/health', (c) => {
 app.route('/api/auth', auth);
 app.route('/api/users', users);
 app.route('/api/line', line);
+app.route('/api/protocols', protocols);
 
 // 404 handler
 app.notFound((c) => {
