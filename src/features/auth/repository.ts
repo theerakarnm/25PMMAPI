@@ -103,4 +103,31 @@ export class AuthRepository {
       throw new DatabaseError('Failed to update last login', error);
     }
   }
+
+  async changePassword(adminId: string, currentPassword: string, newPassword: string): Promise<void> {
+    try {
+      const admin = await this.findById(adminId);
+      if (!admin) {
+        throw new InvalidCredentialsError('Admin not found');
+      }
+
+      const isValidPassword = await bcrypt.compare(currentPassword, admin.passwordHash);
+      if (!isValidPassword) {
+        throw new InvalidCredentialsError('Current password is incorrect');
+      }
+
+      const newPasswordHash = await bcrypt.hash(newPassword, 12);
+      
+      await this.db
+        .update(admins)
+        .set({ 
+          passwordHash: newPasswordHash,
+          updatedAt: new Date(),
+        })
+        .where(eq(admins.id, adminId));
+    } catch (error) {
+      if (error instanceof InvalidCredentialsError) throw error;
+      throw new DatabaseError('Password change failed', error);
+    }
+  }
 }

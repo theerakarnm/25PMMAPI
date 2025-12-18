@@ -13,7 +13,7 @@ export interface JwtPayload {
 export class JwtService {
   static generateToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
     return jwt.sign(payload, env.JWT_SECRET, {
-      expiresIn: +env.JWT_EXPIRES_IN,
+      expiresIn: env.JWT_EXPIRES_IN,
     });
   }
 
@@ -43,5 +43,22 @@ export class JwtService {
     }
 
     return parts[1];
+  }
+
+  static isTokenExpiringSoon(token: string, thresholdMinutes: number = 15): boolean {
+    try {
+      const decoded = jwt.decode(token) as JwtPayload;
+      if (!decoded || !decoded.exp) {
+        return true;
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const timeUntilExpiry = decoded.exp - now;
+      const thresholdSeconds = thresholdMinutes * 60;
+
+      return timeUntilExpiry <= thresholdSeconds;
+    } catch (error) {
+      return true;
+    }
   }
 }

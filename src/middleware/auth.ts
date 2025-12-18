@@ -21,7 +21,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
     if (error instanceof UnauthorizedAccessError) {
       return ResponseBuilder.unauthorized(c, error.message);
     }
-    return ResponseBuilder.error(c, error as Error);
+    return ResponseBuilder.unauthorized(c, 'Authentication required');
   }
 };
 

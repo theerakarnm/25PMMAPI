@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, varchar, timestamp, boolean, jsonb, integer, decimal } from 'drizzle-orm/pg-core';
+import { pgTable, text, uuid, varchar, timestamp, boolean, jsonb, integer, decimal, index, unique } from 'drizzle-orm/pg-core';
 
 export const admins = pgTable('admins', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -11,7 +11,9 @@ export const admins = pgTable('admins', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => ([{
+  emailIdx: index('idx_admins_email').on(table.email),
+}]));
 
 export const interactionLogs = pgTable('interaction_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -28,7 +30,13 @@ export const interactionLogs = pgTable('interaction_logs', {
   timeDifferenceMs: integer('time_difference_ms'), // Milliseconds between sent and responded
   status: varchar('status', { length: 20 }).notNull().default('sent').$type<'sent' | 'delivered' | 'read' | 'responded' | 'missed'>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ([{
+  userIdIdx: index('idx_interaction_logs_user_id').on(table.userId),
+  protocolIdIdx: index('idx_interaction_logs_protocol_id').on(table.protocolId),
+  sentAtIdx: index('idx_interaction_logs_sent_at').on(table.sentAt),
+  statusIdx: index('idx_interaction_logs_status').on(table.status),
+  assignmentIdIdx: index('idx_interaction_logs_assignment_id').on(table.assignmentId),
+}]));
 
 export const protocolAssignments = pgTable('protocol_assignments', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -44,7 +52,12 @@ export const protocolAssignments = pgTable('protocol_assignments', {
   adherenceRate: decimal('adherence_rate', { precision: 5, scale: 2 }).default('0.00'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ([{
+  userIdIdx: index('idx_protocol_assignments_user_id').on(table.userId),
+  protocolIdIdx: index('idx_protocol_assignments_protocol_id').on(table.protocolId),
+  statusIdx: index('idx_protocol_assignments_status').on(table.status),
+  uniqueUserProtocol: unique('unique_user_protocol').on(table.userId, table.protocolId),
+}]));
 
 export const protocols = pgTable('protocols', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -55,12 +68,15 @@ export const protocols = pgTable('protocols', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => ([{
+  statusIdx: index('idx_protocols_status').on(table.status),
+  createdByIdx: index('idx_protocols_created_by').on(table.createdBy),
+}]));
 
 export const protocolSteps = pgTable('protocol_steps', {
   id: uuid('id').primaryKey().defaultRandom(),
   protocolId: uuid('protocol_id').notNull().references(() => protocols.id, { onDelete: 'cascade' }),
-  stepOrder: varchar('step_order', { length: 10 }).notNull(), // Changed to varchar to support decimal notation
+  stepOrder: varchar('step_order', { length: 10 }).notNull(),
   triggerType: varchar('trigger_type', { length: 20 }).notNull().$type<'immediate' | 'delay' | 'scheduled'>(),
   triggerValue: varchar('trigger_value', { length: 100 }).notNull(),
   messageType: varchar('message_type', { length: 20 }).notNull().$type<'text' | 'image' | 'link' | 'flex'>(),
@@ -69,7 +85,11 @@ export const protocolSteps = pgTable('protocol_steps', {
   feedbackConfig: jsonb('feedback_config'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ([{
+  protocolIdIdx: index('idx_protocol_steps_protocol_id').on(table.protocolId),
+  orderIdx: index('idx_protocol_steps_order').on(table.protocolId, table.stepOrder),
+  uniqueProtocolStep: unique('unique_protocol_step').on(table.protocolId, table.stepOrder),
+}]));
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -83,4 +103,7 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => ([{
+  lineUserIdIdx: index('idx_users_line_user_id').on(table.lineUserId),
+  statusIdx: index('idx_users_status').on(table.status),
+}]));
