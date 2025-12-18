@@ -211,7 +211,7 @@ export class ResearchRepository {
 
         stepMetrics.push({
           stepId: step.id,
-          stepOrder: step.stepOrder,
+          stepOrder: +step.stepOrder,
           messageType: step.messageType,
           sentCount,
           responseCount,

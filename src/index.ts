@@ -9,6 +9,7 @@ import { line } from './routes/line.js';
 import protocols from './routes/protocols.js';
 import { feedback } from './routes/feedback.js';
 import { jobs } from './routes/jobs.js';
+import research from './routes/research.js';
 import { env } from './core/config/env.js';
 import { ProtocolScheduler } from './core/jobs/scheduler.js';
 
@@ -43,6 +44,7 @@ app.route('/api/line', line);
 app.route('/api/protocols', protocols);
 app.route('/api/feedback', feedback);
 app.route('/api/jobs', jobs);
+app.route('/api/research', research);
 
 // 404 handler
 app.notFound((c) => {
