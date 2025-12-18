@@ -5,9 +5,14 @@ import { database } from './core/database/connection.js';
 import { errorMiddleware } from './middleware/error.js';
 import { auth } from './routes/auth.js';
 import { users } from './routes/users.js';
+import { line } from './routes/line.js';
 import { env } from './core/config/env.js';
+import { ProtocolScheduler } from './core/jobs/scheduler.js';
 
 const app = new Hono();
+
+// Initialize job scheduler
+ProtocolScheduler.initialize();
 
 // Global middleware
 app.use('*', logger());
@@ -23,12 +28,15 @@ app.get('/health', (c) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     environment: env.NODE_ENV,
+    database: 'connected',
+    scheduler: 'running',
   });
 });
 
 // API routes
 app.route('/api/auth', auth);
 app.route('/api/users', users);
+app.route('/api/line', line);
 
 // 404 handler
 app.notFound((c) => {
