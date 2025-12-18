@@ -7,6 +7,8 @@
     "start": "node dist/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
+    "startup": "tsx scripts/startup.ts",
+    "verify": "tsx scripts/verify-infrastructure.ts",
     "init-admin": "tsx scripts/init-admin.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",

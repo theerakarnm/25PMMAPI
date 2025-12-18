@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Redis connection
 const redis = new Redis(env.REDIS_URL, {
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: null,
 });
 
 // Job data interfaces
