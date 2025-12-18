@@ -211,8 +211,8 @@ export class ProtocolAssignmentService {
   }
 
   async getAssignmentsWithDetails(): Promise<Array<ProtocolAssignment & { 
-    user: { displayName: string; realName: string | null }; 
-    protocol: { name: string } 
+    user: { displayName: string; realName: string | null } | null; 
+    protocol: { name: string } | null;
   }>> {
     return await this.assignmentRepo.getAssignmentsWithUserAndProtocol();
   }

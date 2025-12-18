@@ -285,9 +285,9 @@ export class InteractionLogRepository {
   }
 
   async getLogsWithDetails(): Promise<Array<InteractionLog & { 
-    user: { displayName: string; realName: string | null }; 
-    protocol: { name: string };
-    step: { stepOrder: number; messageType: string };
+    user: { displayName: string; realName: string | null } | null; 
+    protocol: { name: string } | null;
+    step: { stepOrder: string; messageType: string } | null;
   }>> {
     try {
       return await this.db
@@ -334,10 +334,10 @@ export class InteractionLogRepository {
     dateFrom?: Date;
     dateTo?: Date;
   } = {}): Promise<Array<{
-    patientId: string;
-    protocolName: string;
+    patientId: string | null;
+    protocolName: string | null;
     stepId: string;
-    stepOrder: number;
+    stepOrder: string | null;
     messageSentTime: Date;
     actionTime: Date | null;
     status: string;

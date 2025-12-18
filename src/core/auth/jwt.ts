@@ -13,7 +13,7 @@ export interface JwtPayload {
 export class JwtService {
   static generateToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
     return jwt.sign(payload, env.JWT_SECRET, {
-      expiresIn: env.JWT_EXPIRES_IN,
+      expiresIn: +env.JWT_EXPIRES_IN,
     });
   }
 

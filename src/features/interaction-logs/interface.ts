@@ -50,14 +50,14 @@ export interface InteractionLogWithDetailsResponse extends InteractionLogRespons
   user: {
     displayName: string;
     realName: string | null;
-  };
+  } | null;
   protocol: {
     name: string;
-  };
+  } | null;
   step: {
-    stepOrder: number;
+    stepOrder: string;
     messageType: string;
-  };
+  } | null;
 }
 
 export interface InteractionLogStatsResponse {
@@ -70,10 +70,10 @@ export interface InteractionLogStatsResponse {
 }
 
 export interface ResearchDataExportResponse {
-  patientId: string;
-  protocolName: string;
+  patientId: string | null;
+  protocolName: string | null;
   stepId: string;
-  stepOrder: number;
+  stepOrder: string | null;
   messageSentTime: Date;
   actionTime: Date | null;
   status: string;

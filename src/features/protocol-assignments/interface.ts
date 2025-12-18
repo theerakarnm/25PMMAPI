@@ -41,10 +41,10 @@ export interface ProtocolAssignmentWithDetailsResponse extends ProtocolAssignmen
   user: {
     displayName: string;
     realName: string | null;
-  };
+  } | null;
   protocol: {
     name: string;
-  };
+  } | null;
 }
 
 export interface ProtocolAssignmentStatsResponse {

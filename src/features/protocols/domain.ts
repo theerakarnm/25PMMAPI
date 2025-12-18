@@ -80,7 +80,13 @@ export class ProtocolService {
     // Validate protocol exists
     await this.getProtocolById(data.protocolId);
     
-    return await this.protocolRepo.createStep(validatedData);
+    // Ensure contentPayload is provided
+    const stepData = {
+      ...validatedData,
+      contentPayload: validatedData.contentPayload || {},
+    };
+    
+    return await this.protocolRepo.createStep(stepData);
   }
 
   async getProtocolSteps(protocolId: string): Promise<ProtocolStep[]> {
