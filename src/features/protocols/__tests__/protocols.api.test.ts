@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import app from '../../../index.js';
 import { database } from '../../../core/database/connection.js';
 import { admins, protocols, protocolSteps } from '../../../core/database/schema.js';

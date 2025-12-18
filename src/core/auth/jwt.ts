@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { SessionExpiredError, UnauthorizedAccessError } from '../errors/app-error.js';
 
@@ -13,7 +13,7 @@ export interface JwtPayload {
 export class JwtService {
   static generateToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
     return jwt.sign(payload, env.JWT_SECRET, {
-      expiresIn: +env.JWT_EXPIRES_IN,
+      expiresIn: env.JWT_EXPIRES_IN as any,
     });
   }
 

@@ -15,9 +15,13 @@ import {
 } from '../features/protocols/interface.js';
 import { ResponseBuilder } from '../core/response/response-builder.js';
 import { AppError, ValidationError, NotFoundError } from '../core/errors/app-error.js';
+import { authMiddleware } from '../middleware/auth.js';
 
 const protocols = new Hono();
 const protocolService = new ProtocolService();
+
+// Apply authentication middleware to all protocol routes
+protocols.use('*', authMiddleware);
 
 // GET /protocols - List all protocols with optional filtering
 protocols.get(
