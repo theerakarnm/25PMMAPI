@@ -2,7 +2,7 @@ import { WebhookEvent, FollowEvent, PostbackEvent, MessageEvent } from '@line/bo
 import { lineClient } from './client.js';
 import { database } from '../database/connection.js';
 import { users, interactionLogs } from '../database/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { AppError } from '../errors/app-error.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -129,31 +129,38 @@ export class LineWebhookHandler {
         return;
       }
 
-      // Log the interaction
-      await database.insert(interactionLogs).values({
-        id: uuidv4(),
+      // Import feedback domain for processing
+      const { FeedbackDomain } = await import('../../features/feedback/domain.js');
+      
+      // Find the original interaction log to get the sent time
+      const originalLog = await database
+        .select()
+        .from(interactionLogs)
+        .where(and(
+          eq(interactionLogs.userId, user[0].id),
+          eq(interactionLogs.protocolId, protocolId),
+          eq(interactionLogs.stepId, stepId),
+          eq(interactionLogs.status, 'sent')
+        ))
+        .orderBy(desc(interactionLogs.sentAt))
+        .limit(1);
+
+      const originalSentAt = originalLog.length > 0 ? originalLog[0].sentAt : timestamp;
+      
+      // Get assignment ID (for now use a placeholder, will be updated when assignments are implemented)
+      const assignmentId = originalLog.length > 0 ? originalLog[0].assignmentId : uuidv4();
+
+      // Process the feedback response using the feedback domain
+      await FeedbackDomain.processFeedbackResponse({
         userId: user[0].id,
         protocolId,
         stepId,
-        assignmentId: '', // Will be populated when protocol assignments are implemented
-        sentAt: timestamp, // This should be the original sent time, will be updated later
-        respondedAt: timestamp,
+        assignmentId,
         responseValue: action,
         responseAction: action,
-        status: 'responded',
-        createdAt: new Date(),
+        originalSentAt,
       });
 
-      // Send confirmation message based on action
-      let confirmationMessage = 'บันทึกข้อมูลเรียบร้อย ขอบคุณครับ 🙏';
-      
-      if (action === 'completed') {
-        confirmationMessage = 'เยี่ยมมาก! บันทึกการทำกิจกรรมเรียบร้อยแล้ว ✅';
-      } else if (action === 'postpone') {
-        confirmationMessage = 'ไม่เป็นไร สามารถทำในภายหลังได้ครับ 📝';
-      }
-
-      await lineClient.sendTextMessage(userId, confirmationMessage);
     } catch (error) {
       console.error('Error handling postback event:', error);
       throw new AppError(
