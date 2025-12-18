@@ -1,12 +1,14 @@
+import { ContentfulStatusCode } from "hono/utils/http-status";
+
 export class AppError extends Error {
-  public readonly statusCode: number;
+  public readonly statusCode: ContentfulStatusCode;
   public readonly code: string;
   public readonly isOperational: boolean;
   public readonly details?: any;
 
   constructor(
     message: string,
-    statusCode: number = 500,
+    statusCode: ContentfulStatusCode = 500,
     code: string = 'INTERNAL_ERROR',
     isOperational: boolean = true,
     details?: any
@@ -114,5 +116,36 @@ export class NotFoundError extends AppError {
 export class ConflictError extends AppError {
   constructor(message: string = 'Resource conflict') {
     super(message, 409, 'CONFLICT');
+  }
+}
+
+// Data Integrity Errors
+export class ReferentialIntegrityError extends AppError {
+  constructor(message: string = 'Referential integrity violation', details?: any) {
+    super(message, 400, 'REFERENTIAL_INTEGRITY_ERROR', true, details);
+  }
+}
+
+export class ConstraintViolationError extends AppError {
+  constructor(message: string = 'Database constraint violation', details?: any) {
+    super(message, 400, 'CONSTRAINT_VIOLATION_ERROR', true, details);
+  }
+}
+
+export class DataConsistencyError extends AppError {
+  constructor(message: string = 'Data consistency violation', details?: any) {
+    super(message, 400, 'DATA_CONSISTENCY_ERROR', true, details);
+  }
+}
+
+export class OrphanedRecordError extends AppError {
+  constructor(message: string = 'Orphaned record detected', details?: any) {
+    super(message, 400, 'ORPHANED_RECORD_ERROR', true, details);
+  }
+}
+
+export class InvalidStatusTransitionError extends AppError {
+  constructor(message: string = 'Invalid status transition', details?: any) {
+    super(message, 400, 'INVALID_STATUS_TRANSITION_ERROR', true, details);
   }
 }

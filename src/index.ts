@@ -12,6 +12,7 @@ import { feedback } from './routes/feedback.js';
 import { jobs } from './routes/jobs.js';
 import research from './routes/research.js';
 import { health } from './routes/health.js';
+import { dataIntegrity } from './routes/data-integrity.js';
 import { env } from './core/config/env.js';
 import { ProtocolScheduler } from './core/jobs/scheduler.js';
 import { logger } from './core/logging/logger.js';
@@ -44,6 +45,7 @@ app.route('/api/protocols', protocols);
 app.route('/api/feedback', feedback);
 app.route('/api/jobs', jobs);
 app.route('/api/research', research);
+app.route('/api/data-integrity', dataIntegrity);
 app.route('/health', health);
 
 // 404 handler

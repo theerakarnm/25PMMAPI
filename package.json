@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
+    "data-integrity": "tsx scripts/data-integrity.ts",
     "test": "bun test",
     "test:watch": "bun test --watch"
   },

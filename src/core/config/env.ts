@@ -28,7 +28,7 @@ const envSchema = z.object({
   
   // Logging and monitoring
   LOG_LEVEL: z.enum(['ERROR', 'WARN', 'INFO', 'DEBUG']).default('INFO'),
-  ENABLE_FILE_LOGGING: z.boolean().transform(val => !!val).default(false),
+  ENABLE_FILE_LOGGING: z.string().transform(val => val === 'true').default('false'),
 });
 
 export type Env = z.infer<typeof envSchema>;
