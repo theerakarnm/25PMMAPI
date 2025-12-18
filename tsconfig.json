@@ -1,13 +1,30 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "NodeNext",
+    "lib": ["ESNext"],
+    "module": "esnext",
+    "target": "esnext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+
+    "noEmit": false,
+    "composite": true,
     "strict": true,
+    "downlevelIteration": true,
     "skipLibCheck": true,
-    "types": ["node"],
     "jsx": "react-jsx",
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": true,
+    "types": [
+      "@types/bun"
+    ],
+
+    "esModuleInterop": true,
     "jsxImportSource": "hono/jsx",
+    "resolveJsonModule": true,
     "outDir": "./dist",
+    "rootDir": "./src"
   },
-  "exclude": ["node_modules"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

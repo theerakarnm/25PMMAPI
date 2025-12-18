@@ -3,16 +3,16 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc",
+    "build": "bun tsc --project ./tsconfig.json",
     "start": "node dist/index.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
     "startup": "tsx scripts/startup.ts",
     "verify": "tsx scripts/verify-infrastructure.ts",
     "init-admin": "tsx scripts/init-admin.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
   },
   "dependencies": {
     "@hono/node-server": "^1.12.0",
@@ -33,7 +33,6 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/jest": "^29.5.8",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.11.17",
     "@types/node-cron": "^3.0.11",
@@ -42,9 +41,6 @@
     "@types/uuid": "^9.0.7",
     "drizzle-kit": "^0.31.8",
     "fast-check": "^3.15.0",
-    "jest": "^29.7.0",
-    "supertest": "^7.1.4",
-    "ts-jest": "^29.1.1",
     "tsx": "^4.21.0",
     "typescript": "^5.8.3"
   }

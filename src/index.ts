@@ -58,4 +58,9 @@ app.notFound((c) => {
   }, 404);
 });
 
-export default app
+console.log(`Server is running on port ${env.PORT}`);
+
+export default {
+  port: env.PORT,
+  fetch: app.fetch,
+};
