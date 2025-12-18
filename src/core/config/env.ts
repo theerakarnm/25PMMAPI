@@ -25,6 +25,10 @@ const envSchema = z.object({
   // Admin credentials
   ADMIN_EMAIL: z.string().email('Invalid admin email'),
   ADMIN_PASSWORD: z.string().min(8, 'Admin password must be at least 8 characters'),
+  
+  // Logging and monitoring
+  LOG_LEVEL: z.enum(['ERROR', 'WARN', 'INFO', 'DEBUG']).default('INFO'),
+  ENABLE_FILE_LOGGING: z.boolean().transform(val => !!val).default(false),
 });
 
 export type Env = z.infer<typeof envSchema>;

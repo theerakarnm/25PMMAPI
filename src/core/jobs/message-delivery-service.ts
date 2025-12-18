@@ -5,6 +5,10 @@ import { interactionLogs } from '../database/schema.js';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../errors/app-error.js';
 import { v4 as uuidv4 } from 'uuid';
+import { logger } from '../logging/logger.js';
+import { RetryManager, RetryConfigs } from '../resilience/retry.js';
+import { gracefulDegradationManager } from '../resilience/graceful-degradation.js';
+import { circuitBreakerRegistry } from '../resilience/circuit-breaker.js';
 
 export interface MessageDeliveryOptions {
   userId: string;
@@ -66,80 +70,99 @@ export class MessageDeliveryService {
 
     const logId = uuidv4();
     const sentAt = new Date();
+    const context = {
+      userId,
+      protocolId,
+      stepId,
+      assignmentId,
+      messageType,
+      logId,
+    };
+
+    logger.info('Starting message delivery', context);
 
     try {
-      // Create interaction log entry
-      await database.insert(interactionLogs).values({
-        id: logId,
-        userId,
-        protocolId,
-        stepId,
-        assignmentId,
-        sentAt,
-        status: 'sent',
-        createdAt: new Date(),
-      });
+      // Create interaction log entry with retry logic
+      await RetryManager.executeWithRetry(
+        () => database.insert(interactionLogs).values({
+          id: logId,
+          userId,
+          protocolId,
+          stepId,
+          assignmentId,
+          sentAt,
+          status: 'sent',
+          createdAt: new Date(),
+        }),
+        RetryConfigs.database
+      );
 
-      // Deliver the message based on type
-      let messageId: string | undefined;
-      
-      switch (messageType) {
-        case 'text':
-          messageId = await this.sendTextMessage(userId, content.text!);
-          break;
-          
-        case 'image':
-          messageId = await this.sendImageMessage(
-            userId,
-            content.imageUrl!,
-            content.previewImageUrl
-          );
-          break;
-          
-        case 'flex':
-          messageId = await this.sendFlexMessage(
-            userId,
-            content.text || 'Flex Message',
-            content.flexContent
-          );
-          break;
-          
-        case 'template':
-          if (requiresFeedback && feedbackConfig) {
-            messageId = await this.sendFeedbackMessage(userId, {
-              question: feedbackConfig.question,
-              buttons: feedbackConfig.buttons,
-              protocolId,
-              stepId,
-            });
-          } else {
-            throw new AppError(
-              'Template message requires feedback configuration',
-              400,
-              'INVALID_TEMPLATE_CONFIG'
-            );
+      logger.database('insert', 'interaction_logs', true, undefined, context);
+
+      // Deliver the message based on type with graceful degradation
+      const messageId = await gracefulDegradationManager.executeWithDegradation(
+        'line-api',
+        async () => {
+          switch (messageType) {
+            case 'text':
+              return await this.sendTextMessage(userId, content.text!);
+              
+            case 'image':
+              return await this.sendImageMessage(
+                userId,
+                content.imageUrl!,
+                content.previewImageUrl
+              );
+              
+            case 'flex':
+              return await this.sendFlexMessage(
+                userId,
+                content.text || 'Flex Message',
+                content.flexContent
+              );
+              
+            case 'template':
+              if (requiresFeedback && feedbackConfig) {
+                return await this.sendFeedbackMessage(userId, {
+                  question: feedbackConfig.question,
+                  buttons: feedbackConfig.buttons,
+                  protocolId,
+                  stepId,
+                });
+              } else {
+                throw new AppError(
+                  'Template message requires feedback configuration',
+                  400,
+                  'INVALID_TEMPLATE_CONFIG'
+                );
+              }
+              
+            default:
+              throw new AppError(
+                `Unsupported message type: ${messageType}`,
+                400,
+                'UNSUPPORTED_MESSAGE_TYPE'
+              );
           }
-          break;
-          
-        default:
-          throw new AppError(
-            `Unsupported message type: ${messageType}`,
-            400,
-            'UNSUPPORTED_MESSAGE_TYPE'
-          );
-      }
+        },
+        `fallback_${Date.now()}` // Fallback message ID
+      );
 
-      // Update log as delivered
-      await database
-        .update(interactionLogs)
-        .set({
-          messageId,
-          deliveredAt: new Date(),
-          status: 'delivered',
-        })
-        .where(eq(interactionLogs.id, logId));
+      // Update log as delivered with retry logic
+      await RetryManager.executeWithRetry(
+        () => database
+          .update(interactionLogs)
+          .set({
+            messageId,
+            deliveredAt: new Date(),
+            status: 'delivered',
+          })
+          .where(eq(interactionLogs.id, logId)),
+        RetryConfigs.database
+      );
 
-      console.log(`✅ Message delivered successfully to user ${userId} (logId: ${logId})`);
+      logger.database('update', 'interaction_logs', true, undefined, context);
+      logger.info('Message delivered successfully', context, { messageId });
       
       return {
         success: true,
@@ -151,15 +174,21 @@ export class MessageDeliveryService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const isRetryable = this.isRetryableError(error);
       
-      console.error(`❌ Failed to deliver message to user ${userId}:`, errorMessage);
+      logger.error('Failed to deliver message', error as Error, context);
 
-      // Update log with error status
-      await database
-        .update(interactionLogs)
-        .set({
-          status: 'failed',
-        })
-        .where(eq(interactionLogs.id, logId));
+      // Update log with error status (best effort, don't fail if this fails)
+      try {
+        await database
+          .update(interactionLogs)
+          .set({
+            status: 'failed',
+          })
+          .where(eq(interactionLogs.id, logId));
+        
+        logger.database('update', 'interaction_logs', true, undefined, context);
+      } catch (updateError) {
+        logger.error('Failed to update interaction log with error status', updateError as Error, context);
+      }
 
       // Determine if we should retry
       const shouldRetry = isRetryable && retryAttempt < maxRetries;
@@ -185,17 +214,29 @@ export class MessageDeliveryService {
       );
     }
 
-    try {
-      const message = MessageBuilder.buildTextMessage(text);
-      await lineClient.getClient().pushMessage(userId, message);
-      return `text_${Date.now()}`;
-    } catch (error) {
-      throw new AppError(
-        `Failed to send text message: ${error}`,
-        500,
-        'LINE_API_ERROR'
-      );
-    }
+    return await RetryManager.executeWithRetry(
+      async () => {
+        const message = MessageBuilder.buildTextMessage(text);
+        await lineClient.getClient().pushMessage(userId, message);
+        
+        logger.lineApi('sendTextMessage', userId, true, undefined, {
+          textLength: text.length,
+        });
+        
+        return `text_${Date.now()}`;
+      },
+      {
+        ...RetryConfigs.lineApi,
+        name: 'sendTextMessage',
+        onRetry: (attempt, error) => {
+          logger.warn(`Retrying text message send (attempt ${attempt})`, {
+            userId,
+            attempt,
+            error: error.message,
+          });
+        },
+      }
+    );
   }
 
   /**
@@ -214,17 +255,31 @@ export class MessageDeliveryService {
       );
     }
 
-    try {
-      const message = MessageBuilder.buildImageMessage(imageUrl, previewImageUrl);
-      await lineClient.getClient().pushMessage(userId, message);
-      return `image_${Date.now()}`;
-    } catch (error) {
-      throw new AppError(
-        `Failed to send image message: ${error}`,
-        500,
-        'LINE_API_ERROR'
-      );
-    }
+    return await RetryManager.executeWithRetry(
+      async () => {
+        const message = MessageBuilder.buildImageMessage(imageUrl, previewImageUrl);
+        await lineClient.getClient().pushMessage(userId, message);
+        
+        logger.lineApi('sendImageMessage', userId, true, undefined, {
+          imageUrl,
+          hasPreview: !!previewImageUrl,
+        });
+        
+        return `image_${Date.now()}`;
+      },
+      {
+        ...RetryConfigs.lineApi,
+        name: 'sendImageMessage',
+        onRetry: (attempt, error) => {
+          logger.warn(`Retrying image message send (attempt ${attempt})`, {
+            userId,
+            imageUrl,
+            attempt,
+            error: error.message,
+          });
+        },
+      }
+    );
   }
 
   /**
@@ -243,17 +298,31 @@ export class MessageDeliveryService {
       );
     }
 
-    try {
-      const message = MessageBuilder.buildFlexMessage(altText, flexContent);
-      await lineClient.getClient().pushMessage(userId, message);
-      return `flex_${Date.now()}`;
-    } catch (error) {
-      throw new AppError(
-        `Failed to send flex message: ${error}`,
-        500,
-        'LINE_API_ERROR'
-      );
-    }
+    return await RetryManager.executeWithRetry(
+      async () => {
+        const message = MessageBuilder.buildFlexMessage(altText, flexContent);
+        await lineClient.getClient().pushMessage(userId, message);
+        
+        logger.lineApi('sendFlexMessage', userId, true, undefined, {
+          altText,
+          flexType: flexContent.type,
+        });
+        
+        return `flex_${Date.now()}`;
+      },
+      {
+        ...RetryConfigs.lineApi,
+        name: 'sendFlexMessage',
+        onRetry: (attempt, error) => {
+          logger.warn(`Retrying flex message send (attempt ${attempt})`, {
+            userId,
+            altText,
+            attempt,
+            error: error.message,
+          });
+        },
+      }
+    );
   }
 
   /**
@@ -263,17 +332,33 @@ export class MessageDeliveryService {
     userId: string,
     options: FeedbackMessageOptions
   ): Promise<string> {
-    try {
-      const message = MessageBuilder.buildFeedbackMessage(options);
-      await lineClient.getClient().pushMessage(userId, message);
-      return `feedback_${Date.now()}`;
-    } catch (error) {
-      throw new AppError(
-        `Failed to send feedback message: ${error}`,
-        500,
-        'LINE_API_ERROR'
-      );
-    }
+    return await RetryManager.executeWithRetry(
+      async () => {
+        const message = MessageBuilder.buildFeedbackMessage(options);
+        await lineClient.getClient().pushMessage(userId, message);
+        
+        logger.lineApi('sendFeedbackMessage', userId, true, undefined, {
+          question: options.question,
+          buttonCount: options.buttons.length,
+          protocolId: options.protocolId,
+          stepId: options.stepId,
+        });
+        
+        return `feedback_${Date.now()}`;
+      },
+      {
+        ...RetryConfigs.lineApi,
+        name: 'sendFeedbackMessage',
+        onRetry: (attempt, error) => {
+          logger.warn(`Retrying feedback message send (attempt ${attempt})`, {
+            userId,
+            question: options.question,
+            attempt,
+            error: error.message,
+          });
+        },
+      }
+    );
   }
 
   /**
