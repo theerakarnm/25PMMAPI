@@ -2,7 +2,7 @@
   "name": "patient-notification-api",
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "bun --watch src/index.ts",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "build": "bun tsc --project ./tsconfig.json",
     "start": "node dist/index.js",
