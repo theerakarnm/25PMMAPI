@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { database } from '../database/connection.js';
 import { protocolAssignments, protocolSteps, protocols, users } from '../database/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import { JobManager, MessageJobData } from './queue.js';
 
 export class ProtocolScheduler {
@@ -52,7 +52,7 @@ export class ProtocolScheduler {
     try {
       const now = new Date();
       
-      // Get all active protocol assignments
+      // Get all active and assigned protocol assignments
       const activeAssignments = await database
         .select({
           assignment: protocolAssignments,
@@ -64,7 +64,11 @@ export class ProtocolScheduler {
         .innerJoin(protocols, eq(protocolAssignments.protocolId, protocols.id))
         .where(
           and(
-            eq(protocolAssignments.status, 'active'),
+            // Include both assigned and active status
+            or(
+              eq(protocolAssignments.status, 'active'),
+              eq(protocolAssignments.status, 'assigned')
+            ),
             eq(users.status, 'active'),
             eq(protocols.status, 'active')
           )
@@ -119,9 +123,16 @@ export class ProtocolScheduler {
     
     switch (step.triggerType) {
       case 'immediate':
-        // Send immediately when protocol starts (only once)
-        return assignment.currentStep === step.stepOrder && 
-               assignment.startedAt === null;
+        // Send immediately when protocol starts (only once per step)
+        // For assigned status: send if current step matches and hasn't been sent
+        // For active status: send if current step matches and started recently
+        if (assignment.status === 'assigned') {
+          return assignment.currentStep === step.stepOrder;
+        } else {
+          return assignment.currentStep === step.stepOrder && 
+                 assignment.startedAt !== null &&
+                 (now.getTime() - new Date(assignment.startedAt).getTime()) < 60000; // Within 1 minute of starting
+        }
         
       case 'delay':
         // Send after specified delay from assignment start
@@ -130,8 +141,9 @@ export class ProtocolScheduler {
         return now >= targetTime && assignment.currentStep <= step.stepOrder;
         
       case 'scheduled':
-        // Send at specific times (daily recurring)
-        return this.isScheduledTime(step.triggerValue, now) &&
+        // Send at specific times (daily recurring) - only for active assignments
+        return assignment.status === 'active' &&
+               this.isScheduledTime(step.triggerValue, now) &&
                assignment.currentStep <= step.stepOrder;
         
       default:

@@ -61,7 +61,7 @@ app.get(
   async (c) => {
     try {
       const protocolId = c.req.param('protocolId');
-      const assignments = await assignmentService.getProtocolAssignments(protocolId);
+      const assignments = await assignmentService.getProtocolAssignmentsWithUserDetails(protocolId);
       
       return c.json(ResponseBuilder.success(c, assignments));
     } catch (error) {

@@ -33,7 +33,7 @@ ProtocolScheduler.initialize();
 app.use('*', performanceMiddleware);
 app.use('*', honoLogger());
 app.use('*', cors({
-  origin: ['http://localhost:3000', 'https://your-frontend-domain.com'],
+  origin: ['http://localhost:3000', 'https://25pmm.theerakarnm.dev'],
   credentials: true,
 }));
 app.use('*', errorMiddleware);

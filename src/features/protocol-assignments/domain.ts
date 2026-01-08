@@ -6,6 +6,7 @@ import {
   insertProtocolAssignmentSchema
 } from '../../core/database/schema/protocol-assignments.js';
 import { ValidationError, NotFoundError, ConflictError } from '../../core/errors/app-error.js';
+import { JobManager, MessageJobData } from '../../core/jobs/queue.js';
 
 export class ProtocolAssignmentService {
   private assignmentRepo = new ProtocolAssignmentRepository();
@@ -50,7 +51,12 @@ export class ProtocolAssignmentService {
       totalSteps: stepCount,
     });
 
-    return await this.assignmentRepo.create(validatedData);
+    const assignment = await this.assignmentRepo.create(validatedData);
+
+    // Send welcome message immediately after assignment
+    await this.sendWelcomeMessage(assignment, user, protocol);
+
+    return assignment;
   }
 
   async getAssignmentById(id: string): Promise<ProtocolAssignment> {
@@ -87,6 +93,18 @@ export class ProtocolAssignmentService {
     }
 
     return await this.assignmentRepo.findByProtocolId(protocolId);
+  }
+
+  async getProtocolAssignmentsWithUserDetails(protocolId: string): Promise<Array<ProtocolAssignment & { 
+    user: { displayName: string; realName: string | null } | null; 
+  }>> {
+    // Validate protocol exists
+    const protocol = await this.protocolRepo.findById(protocolId);
+    if (!protocol) {
+      throw new NotFoundError('Protocol not found');
+    }
+
+    return await this.assignmentRepo.findByProtocolIdWithUserDetails(protocolId);
   }
 
   async startAssignment(id: string): Promise<ProtocolAssignment> {
@@ -215,5 +233,36 @@ export class ProtocolAssignmentService {
     protocol: { name: string } | null;
   }>> {
     return await this.assignmentRepo.getAssignmentsWithUserAndProtocol();
+  }
+
+  /**
+   * Send welcome message when protocol is assigned
+   */
+  private async sendWelcomeMessage(
+    assignment: ProtocolAssignment, 
+    user: any, 
+    protocol: any
+  ): Promise<void> {
+    try {
+      const messageData: MessageJobData = {
+        userId: user.lineUserId,
+        protocolId: assignment.protocolId,
+        stepId: 'welcome', // Special step ID for welcome message
+        assignmentId: assignment.id,
+        messageType: 'text',
+        content: {
+          text: `สวัสดีค่ะ! คุณได้รับมอบหมายโปรโตคอล "${protocol.name}" แล้ว\n\nระบบจะส่งข้อความแจ้งเตือนตามกำหนดการของโปรโตคอลนี้ค่ะ\n\nหากต้องการเริ่มโปรโตคอลทันที กรุณาติดต่อทีมดูแลค่ะ`
+        },
+        requiresFeedback: false,
+      };
+
+      // Schedule immediate delivery
+      await JobManager.scheduleImmediateMessage(messageData);
+
+      console.log(`Sent welcome message for protocol assignment ${assignment.id} to user ${user.displayName}`);
+    } catch (error) {
+      console.error(`Error sending welcome message for assignment ${assignment.id}:`, error);
+      // Don't throw error here to avoid breaking assignment creation
+    }
   }
 }

@@ -94,6 +94,39 @@ export class ProtocolAssignmentRepository {
     }
   }
 
+  async findByProtocolIdWithUserDetails(protocolId: string): Promise<Array<ProtocolAssignment & { 
+    user: { displayName: string; realName: string | null } | null; 
+  }>> {
+    try {
+      return await this.db
+        .select({
+          id: protocolAssignments.id,
+          userId: protocolAssignments.userId,
+          protocolId: protocolAssignments.protocolId,
+          assignedAt: protocolAssignments.assignedAt,
+          startedAt: protocolAssignments.startedAt,
+          completedAt: protocolAssignments.completedAt,
+          currentStep: protocolAssignments.currentStep,
+          status: protocolAssignments.status,
+          totalSteps: protocolAssignments.totalSteps,
+          completedSteps: protocolAssignments.completedSteps,
+          adherenceRate: protocolAssignments.adherenceRate,
+          createdAt: protocolAssignments.createdAt,
+          updatedAt: protocolAssignments.updatedAt,
+          user: {
+            displayName: users.displayName,
+            realName: users.realName,
+          },
+        })
+        .from(protocolAssignments)
+        .leftJoin(users, eq(protocolAssignments.userId, users.id))
+        .where(eq(protocolAssignments.protocolId, protocolId))
+        .orderBy(desc(protocolAssignments.assignedAt));
+    } catch (error) {
+      throw new DatabaseError('Failed to fetch protocol assignments with user details by protocol ID', error);
+    }
+  }
+
   async findAll(filter: { 
     status?: 'assigned' | 'active' | 'completed' | 'paused';
     userId?: string;
