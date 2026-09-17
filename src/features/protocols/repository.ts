@@ -158,7 +158,7 @@ export class ProtocolRepository {
       return await this.db
         .select()
         .from(protocolSteps)
-        .where(eq(protocolSteps.protocolId, protocolId))
+        .where(and(eq(protocolSteps.protocolId, protocolId), isNull(protocolSteps.deletedAt)))
         .orderBy(sql`CAST(${protocolSteps.stepOrder} AS INTEGER) ASC`);
     } catch (error) {
       throw new DatabaseError('Failed to fetch protocol steps', error);
@@ -170,7 +170,7 @@ export class ProtocolRepository {
       const [step] = await this.db
         .select()
         .from(protocolSteps)
-        .where(eq(protocolSteps.id, id))
+        .where(and(eq(protocolSteps.id, id), isNull(protocolSteps.deletedAt)))
         .limit(1);
 
       return step || null;
@@ -201,11 +201,12 @@ export class ProtocolRepository {
 
   async deleteStep(id: string): Promise<boolean> {
     try {
-      const result = await this.db
-        .delete(protocolSteps)
-        .where(eq(protocolSteps.id, id));
-
-      return (result.rowCount || 0) > 0;
+      const [step] = await this.db
+        .update(protocolSteps)
+        .set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(protocolSteps.id, id), isNull(protocolSteps.deletedAt)))
+        .returning();
+      return !!step;
     } catch (error) {
       throw new DatabaseError('Failed to delete protocol step', error);
     }
@@ -214,13 +215,18 @@ export class ProtocolRepository {
   async deleteStepsByProtocolId(protocolId: string): Promise<number> {
     try {
       const result = await this.db
-        .delete(protocolSteps)
-        .where(eq(protocolSteps.protocolId, protocolId));
-
-      return result.rowCount || 0;
+        .update(protocolSteps)
+        .set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(protocolSteps.protocolId, protocolId), isNull(protocolSteps.deletedAt)))
+        .returning({ id: protocolSteps.id });
+      return result.length;
     } catch (error) {
       throw new DatabaseError('Failed to delete protocol steps', error);
     }
+  }
+
+  async softDeleteStepsByProtocolId(protocolId: string): Promise<number> {
+    return this.deleteStepsByProtocolId(protocolId);
   }
 
   async getStepCountByProtocolId(protocolId: string): Promise<number> {
@@ -228,7 +234,7 @@ export class ProtocolRepository {
       const [result] = await this.db
         .select({ count: count() })
         .from(protocolSteps)
-        .where(eq(protocolSteps.protocolId, protocolId));
+        .where(and(eq(protocolSteps.protocolId, protocolId), isNull(protocolSteps.deletedAt)));
 
       return result?.count || 0;
     } catch (error) {
