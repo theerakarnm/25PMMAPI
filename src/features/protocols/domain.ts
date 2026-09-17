@@ -8,6 +8,9 @@ import {
   insertProtocolStepSchema
 } from '../../core/database/schema/protocols.js';
 import { ValidationError, NotFoundError } from '../../core/errors/app-error.js';
+import { JobManager } from '../../core/jobs/queue.js';
+import { ProtocolAssignmentRepository } from '../protocol-assignments/repository.js';
+import { UserRepository } from '../users/repository.js';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { database } from '../../core/database/connection.js';
 import { protocolAssignments, protocolSteps, protocols } from '../../core/database/schema.js';
@@ -75,11 +78,41 @@ export class ProtocolService {
     return { ...fresh, steps: freshSteps };
   }
 
-  async deleteProtocol(id: string): Promise<void> {
+  async deleteProtocol(id: string, options?: { notifyPatients?: boolean }): Promise<{ pausedAssignments: number }> {
+    const notifyPatients = options?.notifyPatients ?? true;
+    const protocol = await this.getProtocolById(id);
+    const assignmentRepo = new ProtocolAssignmentRepository();
+    const affected = await assignmentRepo.pauseActiveByProtocolId(id);
     const deleted = await this.protocolRepo.delete(id);
     if (!deleted) {
       throw new NotFoundError('Protocol not found');
     }
+    for (const assignment of affected) {
+      try {
+        await JobManager.cancelProtocolJobs(assignment.id);
+      } catch (error) {
+        console.error(`Failed to cancel jobs for assignment ${assignment.id}:`, error);
+      }
+      if (notifyPatients) {
+        try {
+          const user = await new UserRepository().findById(assignment.userId);
+          if (user) {
+            await JobManager.scheduleImmediateMessage({
+              userId: user.lineUserId,
+              protocolId: id,
+              stepId: 'cancellation',
+              assignmentId: assignment.id,
+              messageType: 'text',
+              content: { text: `แจ้งเตือน: โปรโตคอล "${protocol.name}" ได้ถูกยกเลิกแล้ว ท่านจะไม่ได้รับข้อความแจ้งเตือนเพิ่มจากโปรโตคอลนี้` },
+              requiresFeedback: false,
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to send cancellation notice for assignment ${assignment.id}:`, error);
+        }
+      }
+    }
+    return { pausedAssignments: affected.length };
   }
 
   async activateProtocol(id: string): Promise<Protocol> {

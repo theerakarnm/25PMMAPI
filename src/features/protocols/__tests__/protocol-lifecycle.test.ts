@@ -1,6 +1,7 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { database } from '../../../core/database/connection.js';
 import { sql } from 'drizzle-orm';
+import { NotFoundError } from '../../../core/errors/app-error.js';
 import {
   admins,
   users,
@@ -20,6 +21,11 @@ describe('Protocol Lifecycle (soft delete)', () => {
   let step1Id: string;
   let step2Id: string;
   let assignmentId: string;
+  // Delete-cascade scenario fixtures (created inside the cascade test below).
+  let deleteProtocolId: string;
+  let deleteAssignedAssignmentId: string;
+  let deleteCompletedAssignmentId: string;
+  const deleteUserIds: string[] = [];
 
   beforeAll(async () => {
     const stamp = Date.now();
@@ -186,6 +192,93 @@ describe('Protocol Lifecycle (soft delete)', () => {
     expect(result.steps.map(s => s.stepOrder)).toEqual(['1', '2', '3']);
   });
 
+  test('deleteProtocol soft-deletes the protocol, pauses only unfinished assignments, and reports the count', async () => {
+    const service = new ProtocolService();
+    const stamp = Date.now();
+
+    // Two distinct users so the two assignments have separate LINE recipients.
+    const [userA] = await database
+      .insert(users)
+      .values({
+        lineUserId: `delete-a-${stamp}`,
+        displayName: 'Delete Test User A',
+        status: 'active'
+      })
+      .returning();
+    const [userB] = await database
+      .insert(users)
+      .values({
+        lineUserId: `delete-b-${stamp}`,
+        displayName: 'Delete Test User B',
+        status: 'active'
+      })
+      .returning();
+    deleteUserIds.push(userA.id, userB.id);
+
+    // status 'draft' so the minute-based scheduler never selects this fixture
+    const [delProtocol] = await database
+      .insert(protocols)
+      .values({
+        name: `Delete Test ${stamp}`,
+        description: 'fixture for delete cascade tests',
+        createdBy: adminId,
+        status: 'draft'
+      })
+      .returning();
+    deleteProtocolId = delProtocol.id;
+
+    const [assignedAssignment] = await database
+      .insert(protocolAssignments)
+      .values({
+        userId: userA.id,
+        protocolId: deleteProtocolId,
+        status: 'assigned',
+        totalSteps: 0
+      })
+      .returning();
+    deleteAssignedAssignmentId = assignedAssignment.id;
+
+    const [completedAssignment] = await database
+      .insert(protocolAssignments)
+      .values({
+        userId: userB.id,
+        protocolId: deleteProtocolId,
+        status: 'completed',
+        totalSteps: 0
+      })
+      .returning();
+    deleteCompletedAssignmentId = completedAssignment.id;
+
+    // notifyPatients stays false in tests - never send live LINE messages.
+    const result = await service.deleteProtocol(deleteProtocolId, { notifyPatients: false });
+    expect(result.pausedAssignments).toBe(1);
+
+    // Reads no longer see the protocol...
+    await expect(service.getProtocolById(deleteProtocolId)).rejects.toThrow(NotFoundError);
+
+    // ...but the raw row survives with a non-null deleted_at.
+    const raw = await database.execute(
+      sql`select deleted_at from protocols where id = ${deleteProtocolId}`
+    );
+    expect(raw.rows[0]).toBeDefined();
+    expect(raw.rows[0].deleted_at).not.toBeNull();
+
+    // Only the unfinished assignment was paused; the completed one is untouched.
+    const statusRows = await database.execute(
+      sql`select id, status from protocol_assignments where protocol_id = ${deleteProtocolId}`
+    );
+    const statusById = new Map(statusRows.rows.map((row: any) => [row.id, row.status]));
+    expect(statusById.get(deleteAssignedAssignmentId)).toBe('paused');
+    expect(statusById.get(deleteCompletedAssignmentId)).toBe('completed');
+  });
+
+  test('deleteProtocol on an already-deleted protocol throws NotFoundError', async () => {
+    const service = new ProtocolService();
+    await expect(
+      service.deleteProtocol(deleteProtocolId, { notifyPatients: false })
+    ).rejects.toThrow(NotFoundError);
+  });
+
   afterAll(async () => {
     // Hard-delete fixture rows in reverse dependency order.
     if (protocolId) {
@@ -193,9 +286,19 @@ describe('Protocol Lifecycle (soft delete)', () => {
         sql`delete from interaction_logs where protocol_id = ${protocolId}`
       );
     }
+    if (deleteProtocolId) {
+      await database.execute(
+        sql`delete from interaction_logs where protocol_id = ${deleteProtocolId}`
+      );
+    }
     if (assignmentId) {
       await database.execute(
         sql`delete from protocol_assignments where id = ${assignmentId}`
+      );
+    }
+    if (deleteProtocolId) {
+      await database.execute(
+        sql`delete from protocol_assignments where protocol_id = ${deleteProtocolId}`
       );
     }
     if (protocolId) {
@@ -206,8 +309,19 @@ describe('Protocol Lifecycle (soft delete)', () => {
         sql`delete from protocols where id = ${protocolId}`
       );
     }
+    if (deleteProtocolId) {
+      await database.execute(
+        sql`delete from protocol_steps where protocol_id = ${deleteProtocolId}`
+      );
+      await database.execute(
+        sql`delete from protocols where id = ${deleteProtocolId}`
+      );
+    }
     if (userId) {
       await database.execute(sql`delete from users where id = ${userId}`);
+    }
+    for (const id of deleteUserIds) {
+      await database.execute(sql`delete from users where id = ${id}`);
     }
     if (adminId) {
       await database.execute(sql`delete from admins where id = ${adminId}`);

@@ -1,4 +1,4 @@
-import { eq, desc, count, isNull, and, avg, sql } from 'drizzle-orm';
+import { eq, desc, count, isNull, and, avg, sql, inArray } from 'drizzle-orm';
 import { database } from '../../core/database/connection.js';
 import { 
   type ProtocolAssignment, 
@@ -246,6 +246,21 @@ export class ProtocolAssignmentRepository {
       return (result.rowCount || 0) > 0;
     } catch (error) {
       throw new DatabaseError('Failed to delete protocol assignment', error);
+    }
+  }
+
+  async pauseActiveByProtocolId(protocolId: string): Promise<ProtocolAssignment[]> {
+    try {
+      return await this.db
+        .update(protocolAssignments)
+        .set({ status: 'paused', updatedAt: new Date() })
+        .where(and(
+          eq(protocolAssignments.protocolId, protocolId),
+          inArray(protocolAssignments.status, ['assigned', 'active'])
+        ))
+        .returning();
+    } catch (error) {
+      throw new DatabaseError('Failed to pause protocol assignments', error);
     }
   }
 

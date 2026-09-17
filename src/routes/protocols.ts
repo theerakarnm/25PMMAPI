@@ -175,12 +175,14 @@ protocols.put(
 protocols.delete(
   '/:id',
   zValidator('param', z.object({ id: z.string().uuid() })),
+  zValidator('query', z.object({ notifyPatients: z.enum(['true', 'false']).default('true') })),
   async (c) => {
     try {
       const { id } = c.req.valid('param');
-      await protocolService.deleteProtocol(id);
+      const { notifyPatients } = c.req.valid('query');
+      const result = await protocolService.deleteProtocol(id, { notifyPatients: notifyPatients === 'true' });
       
-      return ResponseBuilder.success(c, { message: 'Protocol deleted successfully' });
+      return ResponseBuilder.success(c, { message: 'Protocol deleted successfully', pausedAssignments: result.pausedAssignments });
     } catch (error) {
       if (error instanceof NotFoundError) {
         return ResponseBuilder.notFound(c, error.message);
