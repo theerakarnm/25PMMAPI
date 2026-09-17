@@ -54,6 +54,7 @@ export const selectProtocolStepSchema = z.object({
   feedbackConfig: feedbackConfigSchema.nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  deletedAt: z.date().nullable(),
 });
 
 export type Protocol = typeof protocols.$inferSelect;
