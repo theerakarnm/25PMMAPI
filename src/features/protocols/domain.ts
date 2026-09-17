@@ -2,11 +2,17 @@ import { ProtocolRepository } from './repository.js';
 import { 
   type Protocol, 
   type ProtocolStep,
+  type NewProtocolStep,
   type FeedbackConfig,
   insertProtocolSchema,
   insertProtocolStepSchema
 } from '../../core/database/schema/protocols.js';
 import { ValidationError, NotFoundError } from '../../core/errors/app-error.js';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { database } from '../../core/database/connection.js';
+import { protocolAssignments, protocolSteps, protocols } from '../../core/database/schema.js';
+
+type ProtocolWithSteps = Protocol & { steps: ProtocolStep[] };
 
 export class ProtocolService {
   private protocolRepo = new ProtocolRepository();
@@ -37,14 +43,36 @@ export class ProtocolService {
   }
 
   async updateProtocol(
-    id: string, 
-    updates: Partial<Pick<Protocol, 'name' | 'description' | 'status'>>
-  ): Promise<Protocol> {
-    const protocol = await this.protocolRepo.update(id, updates);
-    if (!protocol) {
-      throw new NotFoundError('Protocol not found');
+    id: string,
+    updates: Partial<Pick<Protocol, 'name' | 'description' | 'status'>>,
+    steps?: Omit<NewProtocolStep, 'id' | 'protocolId' | 'createdAt' | 'updatedAt' | 'stepOrder'>[]
+  ): Promise<ProtocolWithSteps> {
+    const protocol = await this.getProtocolById(id);
+    if (steps) {
+      await database.transaction(async (tx) => {
+        await tx.update(protocols)
+          .set({ ...updates, updatedAt: new Date() })
+          .where(and(eq(protocols.id, id), isNull(protocols.deletedAt)));
+        await tx.update(protocolSteps)
+          .set({ deletedAt: new Date(), updatedAt: new Date() })
+          .where(and(eq(protocolSteps.protocolId, id), isNull(protocolSteps.deletedAt)));
+        const ordered = steps.map((step, index) => ({ ...step, protocolId: id, stepOrder: String(index + 1) }));
+        if (ordered.length > 0) {
+          await tx.insert(protocolSteps).values(ordered);
+        }
+        await tx.update(protocolAssignments)
+          .set({ totalSteps: ordered.length, updatedAt: new Date() })
+          .where(and(
+            eq(protocolAssignments.protocolId, id),
+            inArray(protocolAssignments.status, ['assigned', 'active'])
+          ));
+      });
+    } else {
+      await this.protocolRepo.update(id, updates);
     }
-    return protocol;
+    const fresh = await this.getProtocolById(id);
+    const freshSteps = await this.protocolRepo.findStepsByProtocolId(id);
+    return { ...fresh, steps: freshSteps };
   }
 
   async deleteProtocol(id: string): Promise<void> {

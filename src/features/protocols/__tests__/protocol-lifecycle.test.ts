@@ -10,6 +10,7 @@ import {
   interactionLogs
 } from '../../../core/database/schema.js';
 import { ProtocolRepository } from '../repository.js';
+import { ProtocolService } from '../domain.js';
 
 describe('Protocol Lifecycle (soft delete)', () => {
   let repo: ProtocolRepository;
@@ -133,6 +134,56 @@ describe('Protocol Lifecycle (soft delete)', () => {
     for (const row of raw.rows) {
       expect(row.deleted_at).not.toBeNull();
     }
+  });
+
+  test('updateProtocol with steps atomically replaces the live step set, resyncs assignment totalSteps, and preserves interaction logs', async () => {
+    const service = new ProtocolService();
+
+    // An interaction log anchored to step 1. Before the atomic replacement this
+    // row's step_id reference was destroyed by the old delete-all-then-recreate flow.
+    await database.insert(interactionLogs).values({
+      userId,
+      protocolId,
+      stepId: step1Id,
+      assignmentId,
+      sentAt: new Date(),
+    });
+
+    const stepPayload = (text: string) => ({
+      triggerType: 'immediate' as const,
+      triggerValue: '0',
+      messageType: 'text' as const,
+      contentPayload: { text },
+    });
+    const result = await service.updateProtocol(
+      protocolId,
+      { name: `Renamed ${Date.now()}` },
+      [stepPayload('first'), stepPayload('second'), stepPayload('third')]
+    );
+
+    expect(result.steps.length).toBe(3);
+
+    // 2 original rows soft-deleted + 3 fresh live rows.
+    const rawAll = await database.execute(
+      sql`select id, step_order, deleted_at from protocol_steps where protocol_id = ${protocolId}`
+    );
+    expect(rawAll.rows.length).toBe(5);
+
+    const liveCount = await repo.getStepCountByProtocolId(protocolId);
+    expect(liveCount).toBe(3);
+
+    // The interaction log still resolves its original step_id.
+    const logRows = await database.execute(
+      sql`select id from interaction_logs where step_id = ${step1Id}`
+    );
+    expect(logRows.rows.length).toBe(1);
+
+    const assignmentRows = await database.execute(
+      sql`select total_steps from protocol_assignments where id = ${assignmentId}`
+    );
+    expect(Number(assignmentRows.rows[0].total_steps)).toBe(3);
+
+    expect(result.steps.map(s => s.stepOrder)).toEqual(['1', '2', '3']);
   });
 
   afterAll(async () => {

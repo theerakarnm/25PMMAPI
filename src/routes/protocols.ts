@@ -127,10 +127,11 @@ protocols.put(
   async (c) => {
     try {
       const { id } = c.req.valid('param');
-      const updates = c.req.valid('json');
-      const protocol = await protocolService.updateProtocol(id, updates);
+      const { steps, ...updates } = c.req.valid('json');
+      const normalizedSteps = steps?.map(step => ({ ...step, contentPayload: step.contentPayload ?? {} }));
+      const protocol = await protocolService.updateProtocol(id, updates, normalizedSteps);
       
-      const response: ProtocolResponse = {
+      const response: ProtocolWithStepsResponse = {
         id: protocol.id,
         name: protocol.name,
         description: protocol.description,
@@ -139,6 +140,19 @@ protocols.put(
         createdAt: protocol.createdAt,
         updatedAt: protocol.updatedAt,
         deletedAt: protocol.deletedAt,
+        steps: protocol.steps.map(step => ({
+          id: step.id,
+          protocolId: step.protocolId,
+          stepOrder: step.stepOrder,
+          triggerType: step.triggerType,
+          triggerValue: step.triggerValue,
+          messageType: step.messageType,
+          contentPayload: step.contentPayload,
+          requiresAction: step.requiresAction,
+          feedbackConfig: step.feedbackConfig,
+          createdAt: step.createdAt,
+          updatedAt: step.updatedAt,
+        })),
       };
 
       return ResponseBuilder.success(c, response);
