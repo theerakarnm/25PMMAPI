@@ -134,6 +134,23 @@ app.post(
   }
 );
 
+// Withdraw assignment (pause it and best-effort cancel its queued jobs)
+app.post(
+  '/:id/withdraw',
+  requireAuth,
+  zValidator('param', z.object({ id: z.string().uuid() })),
+  async (c) => {
+    try {
+      const { id } = c.req.valid('param');
+      const assignment = await assignmentService.withdrawAssignment(id);
+      
+      return ResponseBuilder.success(c, assignment);
+    } catch (error) {
+      throw error;
+    }
+  }
+);
+
 // Resume assignment
 app.post(
   '/:id/resume',

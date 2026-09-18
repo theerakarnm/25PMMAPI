@@ -82,6 +82,39 @@ export class ProtocolAssignmentRepository {
     }
   }
 
+  async findByUserIdWithProtocol(userId: string): Promise<Array<ProtocolAssignment & {
+    protocol: { id: string; name: string } | null;
+  }>> {
+    try {
+      return await this.db
+        .select({
+          id: protocolAssignments.id,
+          userId: protocolAssignments.userId,
+          protocolId: protocolAssignments.protocolId,
+          assignedAt: protocolAssignments.assignedAt,
+          startedAt: protocolAssignments.startedAt,
+          completedAt: protocolAssignments.completedAt,
+          currentStep: protocolAssignments.currentStep,
+          status: protocolAssignments.status,
+          totalSteps: protocolAssignments.totalSteps,
+          completedSteps: protocolAssignments.completedSteps,
+          adherenceRate: protocolAssignments.adherenceRate,
+          createdAt: protocolAssignments.createdAt,
+          updatedAt: protocolAssignments.updatedAt,
+          protocol: {
+            id: protocols.id,
+            name: protocols.name,
+          },
+        })
+        .from(protocolAssignments)
+        .leftJoin(protocols, eq(protocolAssignments.protocolId, protocols.id))
+        .where(eq(protocolAssignments.userId, userId))
+        .orderBy(desc(protocolAssignments.assignedAt));
+    } catch (error) {
+      throw new DatabaseError('Failed to fetch protocol assignments with protocol data by user ID', error);
+    }
+  }
+
   async findByProtocolId(protocolId: string): Promise<ProtocolAssignment[]> {
     try {
       return await this.db
