@@ -40,6 +40,7 @@ export interface ScheduledMessageJobData extends MessageJobData {
 // Create queues
 export const messageQueue = new Queue('message-delivery', {
   connection: redis,
+  skipVersionCheck: true,
   defaultJobOptions: {
     removeOnComplete: 100,
     removeOnFail: 50,
@@ -53,6 +54,7 @@ export const messageQueue = new Queue('message-delivery', {
 
 export const scheduledMessageQueue = new Queue('scheduled-messages', {
   connection: redis,
+  skipVersionCheck: true,
   defaultJobOptions: {
     removeOnComplete: 100,
     removeOnFail: 50,
@@ -99,6 +101,7 @@ const messageWorker = new Worker(
   },
   {
     connection: redis,
+    skipVersionCheck: true,
     concurrency: 10,
   }
 );
@@ -118,6 +121,7 @@ const scheduledMessageWorker = new Worker(
   },
   {
     connection: redis,
+    skipVersionCheck: true,
     concurrency: 5,
   }
 );

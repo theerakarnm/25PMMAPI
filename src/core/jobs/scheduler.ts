@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { database } from '../database/connection.js';
 import { protocolAssignments, protocolSteps, protocols, users } from '../database/schema.js';
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, or, isNull } from 'drizzle-orm';
 import { JobManager, MessageJobData } from './queue.js';
 
 export class ProtocolScheduler {
@@ -70,7 +70,8 @@ export class ProtocolScheduler {
               eq(protocolAssignments.status, 'assigned')
             ),
             eq(users.status, 'active'),
-            eq(protocols.status, 'active')
+            eq(protocols.status, 'active'),
+            isNull(protocols.deletedAt)
           )
         );
 
@@ -96,7 +97,7 @@ export class ProtocolScheduler {
       const steps = await database
         .select()
         .from(protocolSteps)
-        .where(eq(protocolSteps.protocolId, protocol.id))
+        .where(and(eq(protocolSteps.protocolId, protocol.id), isNull(protocolSteps.deletedAt)))
         .orderBy(protocolSteps.stepOrder);
 
       for (const step of steps) {

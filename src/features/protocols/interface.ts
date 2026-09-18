@@ -8,13 +8,14 @@ import {
 // API Request/Response schemas
 export const createProtocolRequestSchema = insertProtocolSchema;
 
+export const createProtocolStepRequestSchema = insertProtocolStepSchema;
+
 export const updateProtocolRequestSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   status: z.enum(['draft', 'active', 'paused', 'completed']).optional(),
+  steps: z.array(createProtocolStepRequestSchema.omit({ protocolId: true, stepOrder: true })).optional(),
 });
-
-export const createProtocolStepRequestSchema = insertProtocolStepSchema;
 
 export const updateProtocolStepRequestSchema = z.object({
   stepOrder: z.string().min(1).optional(),

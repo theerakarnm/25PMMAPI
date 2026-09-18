@@ -26,7 +26,7 @@ app.post(
         assignedAt: new Date()
       });
       
-      return c.json(ResponseBuilder.created(c, assignment));
+      return ResponseBuilder.created(c, assignment);
     } catch (error) {
       throw error;
     }
@@ -47,7 +47,7 @@ app.get(
       const filter = c.req.valid('query');
       const assignments = await assignmentService.getAssignments(filter);
       
-      return c.json(ResponseBuilder.success(c, assignments));
+      return ResponseBuilder.success(c, assignments);
     } catch (error) {
       throw error;
     }
@@ -63,7 +63,7 @@ app.get(
       const protocolId = c.req.param('protocolId');
       const assignments = await assignmentService.getProtocolAssignmentsWithUserDetails(protocolId);
       
-      return c.json(ResponseBuilder.success(c, assignments));
+      return ResponseBuilder.success(c, assignments);
     } catch (error) {
       throw error;
     }
@@ -79,7 +79,7 @@ app.get(
       const userId = c.req.param('userId');
       const assignments = await assignmentService.getUserAssignments(userId);
       
-      return c.json(ResponseBuilder.success(c, assignments));
+      return ResponseBuilder.success(c, assignments);
     } catch (error) {
       throw error;
     }
@@ -95,7 +95,7 @@ app.get(
       const id = c.req.param('id');
       const assignment = await assignmentService.getAssignmentById(id);
       
-      return c.json(ResponseBuilder.success(c, assignment));
+      return ResponseBuilder.success(c, assignment);
     } catch (error) {
       throw error;
     }
@@ -111,7 +111,7 @@ app.post(
       const id = c.req.param('id');
       const assignment = await assignmentService.startAssignment(id);
       
-      return c.json(ResponseBuilder.success(c, assignment));
+      return ResponseBuilder.success(c, assignment);
     } catch (error) {
       throw error;
     }
@@ -127,7 +127,7 @@ app.post(
       const id = c.req.param('id');
       const assignment = await assignmentService.pauseAssignment(id);
       
-      return c.json(ResponseBuilder.success(c, assignment));
+      return ResponseBuilder.success(c, assignment);
     } catch (error) {
       throw error;
     }
@@ -143,7 +143,7 @@ app.post(
       const id = c.req.param('id');
       const assignment = await assignmentService.resumeAssignment(id);
       
-      return c.json(ResponseBuilder.success(c, assignment));
+      return ResponseBuilder.success(c, assignment);
     } catch (error) {
       throw error;
     }
@@ -159,7 +159,7 @@ app.post(
       const id = c.req.param('id');
       const assignment = await assignmentService.completeAssignment(id);
       
-      return c.json(ResponseBuilder.success(c, assignment));
+      return ResponseBuilder.success(c, assignment);
     } catch (error) {
       throw error;
     }
@@ -175,7 +175,7 @@ app.delete(
       const id = c.req.param('id');
       await assignmentService.deleteAssignment(id);
       
-      return c.json(ResponseBuilder.noContent(c));
+      return ResponseBuilder.noContent(c);
     } catch (error) {
       throw error;
     }
@@ -190,7 +190,7 @@ app.get(
     try {
       const stats = await assignmentService.getAssignmentStats();
       
-      return c.json(ResponseBuilder.success(c, stats));
+      return ResponseBuilder.success(c, stats);
     } catch (error) {
       throw error;
     }
@@ -205,7 +205,7 @@ app.get(
     try {
       const assignments = await assignmentService.getAssignmentsWithDetails();
       
-      return c.json(ResponseBuilder.success(c, assignments));
+      return ResponseBuilder.success(c, assignments);
     } catch (error) {
       throw error;
     }
