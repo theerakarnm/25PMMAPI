@@ -1,7 +1,24 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { MessageDeliveryService } from '../message-delivery-service.js';
+import { MessageDeliveryService, isLoggableStepId } from '../message-delivery-service.js';
 
 describe("Message Delivery Service Tests", () => {
+
+  test("should treat system notice sentinel step ids as not loggable", () => {
+    // System notices are delivered with sentinel step ids that are not uuids,
+    // so they can never be written to interaction_logs.step_id.
+    expect(isLoggableStepId('cancellation')).toBe(false);
+    expect(isLoggableStepId('welcome')).toBe(false);
+    expect(isLoggableStepId('')).toBe(false);
+    expect(isLoggableStepId('not-a-uuid')).toBe(false);
+    expect(isLoggableStepId('00000000-0000-0000-0000-00000000000')).toBe(false);
+  });
+
+  test("should treat real uuid step ids as loggable", () => {
+    expect(isLoggableStepId('e671d6b7-341d-408c-8c7a-8522225130c1')).toBe(true);
+    expect(isLoggableStepId('E671D6B7-341D-408C-8C7A-8522225130C1')).toBe(true);
+    expect(isLoggableStepId('00000000-0000-0000-0000-000000000000')).toBe(true);
+  });
+
   
   test("should validate message delivery options", () => {
     const validOptions = {

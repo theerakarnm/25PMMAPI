@@ -44,6 +44,20 @@ export interface DeliveryResult {
   retryable?: boolean;
 }
 
+// Any hex uuid Postgres would accept for a `uuid` column, not just RFC 4122 v1-v5.
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * System notices (protocol cancellation, welcome messages) are delivered with
+ * sentinel step ids such as 'cancellation' or 'welcome'. `interaction_logs.step_id`
+ * is a uuid column with a foreign key to `protocol_steps`, so those sentinels can
+ * never be logged. Use this to decide whether an interaction log row is possible.
+ */
+export function isLoggableStepId(stepId: string): boolean {
+  return UUID_PATTERN.test(stepId);
+}
+
 /**
  * Comprehensive message delivery service with enhanced error handling and monitoring
  */
@@ -70,6 +84,8 @@ export class MessageDeliveryService {
 
     const logId = uuidv4();
     const sentAt = new Date();
+    // System notices use sentinel step ids, which cannot be stored in interaction_logs.
+    const isLogged = isLoggableStepId(stepId);
     const context = {
       userId,
       protocolId,
@@ -82,22 +98,29 @@ export class MessageDeliveryService {
     logger.info('Starting message delivery', context);
 
     try {
-      // Create interaction log entry with retry logic
-      await RetryManager.executeWithRetry(
-        () => database.insert(interactionLogs).values({
-          id: logId,
-          userId,
-          protocolId,
-          stepId,
-          assignmentId,
-          sentAt,
-          status: 'sent',
-          createdAt: new Date(),
-        }),
-        RetryConfigs.database
-      );
+      if (isLogged) {
+        // Create interaction log entry with retry logic
+        await RetryManager.executeWithRetry(
+          () => database.insert(interactionLogs).values({
+            id: logId,
+            userId,
+            protocolId,
+            stepId,
+            assignmentId,
+            sentAt,
+            status: 'sent',
+            createdAt: new Date(),
+          }),
+          RetryConfigs.database
+        );
 
-      logger.database('insert', 'interaction_logs', true, undefined, context);
+        logger.database('insert', 'interaction_logs', true, undefined, context);
+      } else {
+        logger.info(
+          'Skipping interaction log for system notice with non-uuid step id',
+          context
+        );
+      }
 
       // Deliver the message based on type with graceful degradation
       const messageId = await gracefulDegradationManager.executeWithDegradation(
@@ -148,20 +171,23 @@ export class MessageDeliveryService {
         `fallback_${Date.now()}` // Fallback message ID
       );
 
-      // Update log as delivered with retry logic
-      await RetryManager.executeWithRetry(
-        () => database
-          .update(interactionLogs)
-          .set({
-            messageId,
-            deliveredAt: new Date(),
-            status: 'delivered',
-          })
-          .where(eq(interactionLogs.id, logId)),
-        RetryConfigs.database
-      );
+      if (isLogged) {
+        // Update log as delivered with retry logic
+        await RetryManager.executeWithRetry(
+          () => database
+            .update(interactionLogs)
+            .set({
+              messageId,
+              deliveredAt: new Date(),
+              status: 'delivered',
+            })
+            .where(eq(interactionLogs.id, logId)),
+          RetryConfigs.database
+        );
 
-      logger.database('update', 'interaction_logs', true, undefined, context);
+        logger.database('update', 'interaction_logs', true, undefined, context);
+      }
+
       logger.info('Message delivered successfully', context, { messageId });
       
       return {
@@ -177,17 +203,19 @@ export class MessageDeliveryService {
       logger.error('Failed to deliver message', error as Error, context);
 
       // Update log with error status (best effort, don't fail if this fails)
-      try {
-        await database
-          .update(interactionLogs)
-          .set({
-            status: 'failed',
-          })
-          .where(eq(interactionLogs.id, logId));
-        
-        logger.database('update', 'interaction_logs', true, undefined, context);
-      } catch (updateError) {
-        logger.error('Failed to update interaction log with error status', updateError as Error, context);
+      if (isLogged) {
+        try {
+          await database
+            .update(interactionLogs)
+            .set({
+              status: 'failed',
+            })
+            .where(eq(interactionLogs.id, logId));
+          
+          logger.database('update', 'interaction_logs', true, undefined, context);
+        } catch (updateError) {
+          logger.error('Failed to update interaction log with error status', updateError as Error, context);
+        }
       }
 
       // Determine if we should retry
