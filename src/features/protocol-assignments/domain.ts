@@ -75,14 +75,16 @@ export class ProtocolAssignmentService {
     return await this.assignmentRepo.findAll(filter);
   }
 
-  async getUserAssignments(userId: string): Promise<ProtocolAssignment[]> {
+  async getUserAssignments(userId: string): Promise<Array<ProtocolAssignment & {
+    protocol: { id: string; name: string } | null;
+  }>> {
     // Validate user exists
     const user = await this.userRepo.findById(userId);
     if (!user) {
       throw new NotFoundError('User not found');
     }
 
-    return await this.assignmentRepo.findByUserId(userId);
+    return await this.assignmentRepo.findByUserIdWithProtocol(userId);
   }
 
   async getProtocolAssignments(protocolId: string): Promise<ProtocolAssignment[]> {
@@ -164,6 +166,44 @@ export class ProtocolAssignmentService {
     
     if (!assignment) {
       throw new NotFoundError('Protocol assignment not found');
+    }
+
+    return assignment;
+  }
+
+  /**
+   * Withdraw a single assignment: soft-pause it and cancel its queued jobs so
+   * no already-scheduled messages are delivered.
+   *
+   * Job cancellation is best-effort: Redis may be unreachable, but the
+   * withdraw itself must still succeed.
+   */
+  async withdrawAssignment(id: string): Promise<ProtocolAssignment> {
+    const assignment = await this.assignmentRepo.findById(id);
+    if (!assignment) {
+      throw new NotFoundError('Protocol assignment not found');
+    }
+
+    if (assignment.status === 'completed') {
+      throw new ValidationError('Completed assignments cannot be withdrawn');
+    }
+
+    try {
+      await JobManager.cancelProtocolJobs(id);
+    } catch (error) {
+      console.error(`Failed to cancel jobs for assignment ${id}:`, error);
+    }
+
+    if (assignment.status !== 'paused') {
+      const updatedAssignment = await this.assignmentRepo.update(id, {
+        status: 'paused'
+      });
+
+      if (!updatedAssignment) {
+        throw new NotFoundError('Failed to withdraw assignment');
+      }
+
+      return updatedAssignment;
     }
 
     return assignment;

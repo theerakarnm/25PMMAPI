@@ -47,6 +47,13 @@ export interface ProtocolAssignmentWithDetailsResponse extends ProtocolAssignmen
   } | null;
 }
 
+export interface ProtocolAssignmentWithProtocolResponse extends ProtocolAssignmentResponse {
+  protocol: {
+    id: string;
+    name: string;
+  } | null;
+}
+
 export interface ProtocolAssignmentStatsResponse {
   total: number;
   assigned: number;
